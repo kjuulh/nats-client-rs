@@ -3,11 +3,11 @@ use std::task::{Context, Poll};
 
 use anyhow::Result;
 use bytes::BytesMut;
-use futures::{ready, Sink, SinkExt, Stream, StreamExt};
+use futures::{ready, Sink, Stream};
 use tokio::io;
 use tokio::io::AsyncWrite;
 
-use crate::op::{NatsConnectOp, ParserOp};
+use crate::op::{ParserOp};
 use crate::parser;
 
 pub struct NatsTcpConn {

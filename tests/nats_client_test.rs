@@ -1,6 +1,6 @@
-use std::time::Duration;
+
 use anyhow::Result;
-use futures::executor::block_on;
+
 use nats_client_rs::{connect};
 
 #[tokio::test]
