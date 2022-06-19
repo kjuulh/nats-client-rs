@@ -1,47 +1,129 @@
-pub mod parser;
-mod op;
-
-
-
+use std::io::Error;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use anyhow::Result;
-use bytes::{BytesMut};
+use bytes::BytesMut;
+use futures::{ready, Sink, SinkExt, Stream, StreamExt};
+use futures::future::ready;
+use tokio::io;
+use tokio::io::AsyncWrite;
 
+use crate::op::{NatsConnectOp, ParserOp};
 
-
-
-
-
-
-
-enum NatsOp {}
+pub mod parser;
+mod op;
 
 struct NatsTcpConn {
     stream: tokio::net::TcpStream,
     read_buffer: BytesMut,
+    write_buffer: BytesMut,
+    flushed: bool,
 }
 
 impl NatsTcpConn {
     fn new(stream: tokio::net::TcpStream) -> Self {
-        Self { stream, read_buffer: BytesMut::with_capacity(8 * 1024) }
+        Self {
+            stream,
+            read_buffer: BytesMut::with_capacity(8 * 1024),
+            write_buffer: BytesMut::with_capacity(8 * 1024),
+            flushed: true,
+        }
     }
 
-    // fn decode(src: &mut BytesMut) -> Result<NatsOp> {
-    //     Parser::decode(src)
-    // }
+    fn decode(src: &mut BytesMut) -> Result<ParserOp> {
+        parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str())
+    }
+
+    async fn send_command(op: ParserOp) -> Result<()> {
+        Ok(())
+    }
 }
 
-// impl Stream for NatsTcpConn {
-//     type Item = NatsOp;
-//
-//     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//         //NatsTcpConn::decode(&mut self.read_buffer)
-//     }
-// }
+impl Stream for NatsTcpConn {
+    type Item = ParserOp;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match NatsTcpConn::decode(&mut self.get_mut().read_buffer) {
+            Ok(op) => Poll::Ready(Some(op)),
+            Err(e) => {
+                println!("could not decode: {}", e);
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl Sink<ParserOp> for NatsTcpConn {
+    type Error = anyhow::Error;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+        if !self.flushed {
+            match Pin::new(&mut self.get_mut().stream).poll_flush(cx)? {
+                Poll::Ready(()) => Poll::Ready(Ok(())),
+                Poll::Pending => Poll::Pending
+            }
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: ParserOp) -> std::result::Result<(), Self::Error> {
+        let mut this = self.get_mut();
+
+        this.write_buffer.extend(item.into_bytes()?);
+        this.flushed = false;
+
+        Ok(())
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+        let mut this = self.get_mut();
+
+        if this.flushed {
+            return Poll::Ready(Ok(()));
+        }
+
+        let len = ready!(Pin::new(&mut this.stream).poll_write(cx, this.write_buffer.as_ref()))?;
+        let wrote_all = len == this.write_buffer.len();
+        this.flushed = true;
+        this.write_buffer.clear();
+
+        let res = if wrote_all {
+            Ok(())
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "failed to write to socket").into())
+        };
+
+        Poll::Ready(res)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+        ready!(self.poll_flush(cx))?;
+        Poll::Ready(Ok(()))
+    }
+}
 
 pub async fn connect(url: String) -> Result<()> {
     let stream = tokio::net::TcpStream::connect(url).await?;
-    let _ = NatsTcpConn::new(stream);
+    let (mut sink, mut conn) = NatsTcpConn::new(stream).split();
+
+    let _ = tokio::spawn(async move {
+        while let Some(item) = conn.next().await {
+            println!("{:#?}", item)
+        }
+    });
+
+    sink.send(ParserOp::Connect(NatsConnectOp {
+        verbose: true,
+        pedantic: false,
+        tls_required: false,
+        name: "some_name".to_string(),
+        lang: "rust".to_string(),
+        version: "1".to_string(),
+        protocol: 1,
+    })).await?;
+
 
     Ok(())
 }

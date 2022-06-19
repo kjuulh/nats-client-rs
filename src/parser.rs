@@ -1,13 +1,5 @@
 use anyhow::{anyhow, Result};
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{char, space0},
-    Err::Error,
-    error::{context, ContextError, ErrorKind, FromExternalError, ParseError, VerboseError},
-    IResult,
-    sequence::{delimited, pair},
-};
+use nom::{branch::alt, bytes::complete::tag, character::complete::{char, space0}, Err, Err::Error, error::{context, ContextError, ErrorKind, FromExternalError, ParseError, VerboseError}, IResult, sequence::{delimited, pair}};
 use serde::Deserialize;
 
 use crate::op::{NatsConnectOp, ParserOp};
@@ -15,10 +7,10 @@ use crate::op::{NatsConnectOp, ParserOp};
 pub struct Parser {}
 
 impl Parser {
-    pub fn parse(src: &str) -> Result<()> {
-        println!("failed with e: {:#?}", Parser::root::<VerboseError<&str>>(src));
-
-        Ok(())
+    pub fn parse<'a>(src: &'a str) -> anyhow::Result<ParserOp> {
+        Parser::root::<VerboseError<&'a str>>(src)
+            .and_then(|(_, op)| Ok(op))
+            .or(Err(anyhow!("parsing error")))
     }
 
     fn root<'a, E: ParseError<&'a str> + FromExternalError<&'a str, anyhow::Error> + ContextError<&'a str>>(i: &'a str) -> IResult<&'a str, ParserOp, E> {
