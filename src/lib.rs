@@ -1,11 +1,9 @@
-use std::io::Error;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use anyhow::Result;
 use bytes::BytesMut;
 use futures::{ready, Sink, SinkExt, Stream, StreamExt};
-use futures::future::ready;
 use tokio::io;
 use tokio::io::AsyncWrite;
 
@@ -34,16 +32,12 @@ impl NatsTcpConn {
     fn decode(src: &mut BytesMut) -> Result<ParserOp> {
         parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str())
     }
-
-    async fn send_command(op: ParserOp) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Stream for NatsTcpConn {
     type Item = ParserOp;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match NatsTcpConn::decode(&mut self.get_mut().read_buffer) {
             Ok(op) => Poll::Ready(Some(op)),
             Err(e) => {
@@ -112,6 +106,7 @@ pub async fn connect(url: String) -> Result<()> {
         while let Some(item) = conn.next().await {
             println!("{:#?}", item)
         }
+        println!("finished")
     });
 
     sink.send(ParserOp::Connect(NatsConnectOp {
@@ -123,7 +118,6 @@ pub async fn connect(url: String) -> Result<()> {
         version: "1".to_string(),
         protocol: 1,
     })).await?;
-
 
     Ok(())
 }

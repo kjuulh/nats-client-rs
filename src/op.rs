@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
+
 use bytes::{BufMut, Bytes, BytesMut};
-use nom::AsBytes;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
@@ -20,13 +20,6 @@ pub enum ParserOp {
     Connect(NatsConnectOp),
     Info(String),
 }
-
-#[derive(thiserror::Error, Debug)]
-pub enum NatsParsingError {
-    #[error("COMMAND not allowed in NATS client")]
-    CommandNotAllowed
-}
-
 
 impl ParserOp {
     pub fn into_bytes(self) -> anyhow::Result<Bytes> {
