@@ -1,6 +1,3 @@
-
-
-
 use anyhow::Result;
 
 use futures::{SinkExt, StreamExt};
@@ -18,12 +15,12 @@ pub mod nats_tcp_conn;
 pub async fn connect(url: String) -> Result<()> {
     let stream = tokio::net::TcpStream::connect(url).await?;
     let (mut sink, mut conn) = NatsTcpConn::new(stream).split();
-     let _ = tokio::spawn(async move {
-         while let Some(item) = conn.next().await {
-             println!("{:#?}", item)
-         }
-         println!("finished")
-     });
+    let handle = tokio::spawn(async move {
+        while let Some(item) = conn.next().await {
+            println!("{:#?}", item)
+        }
+        println!("finished")
+    });
 
     sink.send(ParserOp::Connect(NatsConnectOp {
         verbose: false,
@@ -34,6 +31,8 @@ pub async fn connect(url: String) -> Result<()> {
         version: "1".to_string(),
         protocol: 1,
     })).await?;
+
+    handle.await?;
 
     Ok(())
 }

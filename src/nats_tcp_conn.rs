@@ -27,8 +27,12 @@ impl NatsTcpConn {
         }
     }
 
-    fn decode(src: &mut BytesMut) -> Result<ParserOp> {
-        parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str())
+    fn decode(src: &mut BytesMut) -> Result<Option<ParserOp>> {
+        if src.len() == 0 {
+            return Ok(None);
+        }
+
+        parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str()).and_then(|op| Ok(Some(op)))
     }
 }
 
@@ -37,11 +41,15 @@ impl Stream for NatsTcpConn {
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match NatsTcpConn::decode(&mut self.get_mut().read_buffer) {
-            Ok(op) => Poll::Ready(Some(op)),
+            Ok(Some(op)) => Poll::Ready(Some(op)),
+            Ok(None) => {
+                Poll::Pending
+            }
             Err(e) => {
                 println!("could not decode: {}", e);
                 Poll::Pending
             }
+
         }
     }
 }
