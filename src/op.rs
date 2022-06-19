@@ -15,14 +15,36 @@ pub struct NatsConnectOp {
     pub(crate) protocol: u8,
 }
 
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
+pub struct NatsInfoOp {
+    pub(crate) server_id: String,
+    pub(crate) version: String,
+    pub(crate) go: String,
+    pub(crate) host: String,
+    pub(crate) port: usize,
+    pub(crate) max_payload: usize,
+    pub(crate) proto: u8,
+    pub(crate) client_id: Option<String>,
+    pub(crate) auth_required: Option<bool>,
+    pub(crate) tls_required: Option<bool>,
+    pub(crate) tls_verify: Option<bool>,
+    pub(crate) connect_urls: Option<Vec<String>>,
+    pub(crate) ldm: Option<bool>,
+
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ParserOp {
     Connect(NatsConnectOp),
-    Info(String),
+    Info(NatsInfoOp),
+    Ping,
+    Pong,
+    Ok,
 }
 
 impl ParserOp {
     pub fn into_bytes(self) -> anyhow::Result<Bytes> {
+        println!("sending: {:#?}", self);
         match self {
             ParserOp::Connect(conn) => {
                 let prefix = "CONNECT";
@@ -36,11 +58,38 @@ impl ParserOp {
             }
             ParserOp::Info(info) => {
                 let prefix = "INFO";
-                let serialized_connect = info;
+                let serialized_info = serde_json::to_string(info.borrow())?;
 
-                let mut dst = BytesMut::with_capacity(prefix.len() + serialized_connect.len() + 2);
+                let mut dst = BytesMut::with_capacity(prefix.len() + serialized_info.len() + 2);
                 dst.put(prefix.as_bytes());
-                dst.put(serialized_connect.as_bytes());
+                dst.put(serialized_info.as_bytes());
+                dst.put("\r\n".as_bytes());
+                Ok(dst.freeze())
+            }
+            ParserOp::Ok => {
+                println!("Sending OK");
+
+                let prefix = "+OK";
+                let mut dst = BytesMut::with_capacity(prefix.len() + 2);
+                dst.put(prefix.as_bytes());
+                dst.put("\r\n".as_bytes());
+                Ok(dst.freeze())
+            }
+            ParserOp::Ping => {
+                println!("Sending PING");
+
+                let prefix = "PING";
+                let mut dst = BytesMut::with_capacity(prefix.len() + 2);
+                dst.put(prefix.as_bytes());
+                dst.put("\r\n".as_bytes());
+                Ok(dst.freeze())
+            }
+            ParserOp::Pong => {
+                println!("Sending PONG");
+
+                let prefix = "PONG";
+                let mut dst = BytesMut::with_capacity(prefix.len() + 2);
+                dst.put(prefix.as_bytes());
                 dst.put("\r\n".as_bytes());
                 Ok(dst.freeze())
             }

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use nom::{branch::alt, bytes::complete::tag, character::complete::{char, space0}, Err::Error, error::{context, ContextError, ErrorKind, FromExternalError, ParseError, VerboseError}, IResult, sequence::{delimited, pair}};
 use serde::Deserialize;
 
-use crate::op::{NatsConnectOp, ParserOp};
+use crate::op::{NatsConnectOp, NatsInfoOp, ParserOp};
 
 pub struct Parser {}
 
@@ -24,8 +24,13 @@ impl Parser {
         let (input, (command, _)) = pair(
             alt(
                 (
-                    tag("CONNECT"),
                     tag("INFO"),
+                    tag("CONNECT"),
+                    tag("MSG"),
+                    tag("PING"),
+                    tag("PONG"),
+                    tag("+OK"),
+                    tag("-ERR")
                 )
             ),
             space0)(i)?;
@@ -34,8 +39,13 @@ impl Parser {
     }
 
     fn parse_command<'a, E: ParseError<&'a str> + FromExternalError<&'a str, anyhow::Error> + ContextError<&'a str>>(command: &'a str, i: &'a str) -> IResult<&'a str, ParserOp, E> {
+        println!("Receiving: {}", command);
         let res = match command {
             "CONNECT" => Parser::parse_json::<NatsConnectOp>(i).map(ParserOp::Connect),
+            "INFO" => Parser::parse_json::<NatsInfoOp>(i).map(ParserOp::Info),
+            "PING" => Ok(ParserOp::Ping),
+            "PONG" => Ok(ParserOp::Pong),
+            "+OK" => Ok(ParserOp::Ok),
             _ => Err(anyhow!("COMMAND not allowed in nats protocol"))
         };
 
