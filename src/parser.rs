@@ -1,17 +1,15 @@
 use anyhow::{anyhow, Result};
-use bytes::BytesMut;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until, take_while},
-    character::complete::{alpha1, alphanumeric0, alphanumeric1, char, space0},
-    character::is_space,
-    combinator::{cut, into, map, map_res, opt, rest},
+    bytes::complete::tag,
+    character::complete::{char, space0},
     Err::Error,
     error::{context, ContextError, ErrorKind, FromExternalError, ParseError, VerboseError},
     IResult,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, pair},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
 use crate::op::{NatsConnectOp, ParserOp};
 
 pub struct Parser {}
@@ -46,7 +44,7 @@ impl Parser {
 
     fn parse_command<'a, E: ParseError<&'a str> + FromExternalError<&'a str, anyhow::Error> + ContextError<&'a str>>(command: &'a str, i: &'a str) -> IResult<&'a str, ParserOp, E> {
         let res = match command {
-            "CONNECT" => Parser::parse_json::<NatsConnectOp>(i).and_then(|op| Ok(ParserOp::Connect(op))),
+            "CONNECT" => Parser::parse_json::<NatsConnectOp>(i).map(ParserOp::Connect),
             _ => Err(anyhow!("COMMAND not allowed in nats protocol"))
         };
 
