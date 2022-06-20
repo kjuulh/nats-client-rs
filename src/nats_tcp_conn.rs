@@ -1,11 +1,11 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use bytes::BytesMut;
 use futures::{ready, Sink, Stream};
 use tokio::io;
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::op::{ParserOp};
 use crate::parser;
@@ -32,24 +32,67 @@ impl NatsTcpConn {
             return Ok(None);
         }
 
-        parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str()).and_then(|op| Ok(Some(op)))
+        match parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str()).and_then(|op| Ok(Some(op))) {
+            Ok(op) => {
+                println!("parsing ok {:#?}", op);
+                Ok(op)
+            }
+            Err(e) => {
+                eprintln!("parsing error {:#?}", e);
+                Err(e)
+            }
+        }
     }
 }
 
 impl Stream for NatsTcpConn {
     type Item = ParserOp;
 
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match NatsTcpConn::decode(&mut self.get_mut().read_buffer) {
-            Ok(Some(op)) => Poll::Ready(Some(op)),
-            Ok(None) => {
-                Poll::Pending
-            }
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        match NatsTcpConn::decode(&mut this.read_buffer) {
+            Ok(Some(op)) => return Poll::Ready(Some(op)),
+            Ok(None) => {}
             Err(e) => {
                 println!("could not decode: {}", e);
-                Poll::Pending
+                return Poll::Ready(None);
             }
+        }
 
+        this.read_buffer.reserve(1);
+
+        let mut buff: [u8; 2048] = [0; 2048];
+        let mut buff: ReadBuf = ReadBuf::new(&mut buff);
+        loop {
+            match Pin::new(&mut this.stream).poll_read(cx, &mut buff) {
+                Poll::Ready(Ok(())) => {
+                    let filled = buff.filled();
+                    let size = filled.len();
+                    this.read_buffer.extend(filled);
+                    buff.clear();
+                    let read_buffer_contents = std::str::from_utf8(this.read_buffer.as_ref()).unwrap();
+                    println!("read_buffer: {}", read_buffer_contents);
+
+                    if size > 0 {
+                        if let Ok(Some(op)) = NatsTcpConn::decode(&mut this.read_buffer) {
+                            return Poll::Ready(Some(op));
+                        }
+                    } else {
+                        return Poll::Ready(None);
+                    }
+                }
+                Poll::Ready(Err(err)) => {
+                    return if err.kind() == io::ErrorKind::WouldBlock {
+                        Poll::Pending
+                    } else {
+                        eprintln!("poll stream error");
+                        Poll::Ready(None)
+                    };
+                }
+                Poll::Pending => {
+                    return Poll::Pending;
+                }
+            }
         }
     }
 }

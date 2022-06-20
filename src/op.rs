@@ -17,17 +17,28 @@ pub struct NatsConnectOp {
 
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub struct NatsInfoOp {
+    #[serde(alias = "server_id")]
     pub(crate) server_id: String,
+    #[serde(alias = "server_name")]
+    pub(crate) server_name: Option<String>,
     pub(crate) version: String,
     pub(crate) go: String,
     pub(crate) host: String,
     pub(crate) port: usize,
+    #[serde(alias = "max_payload")]
     pub(crate) max_payload: usize,
     pub(crate) proto: u8,
-    pub(crate) client_id: Option<String>,
+    #[serde(alias = "git_commit")]
+    pub(crate) git_commit: Option<String>,
+    #[serde(alias = "client_id")]
+    pub(crate) client_id: Option<usize>,
+    #[serde(alias = "auth_required")]
     pub(crate) auth_required: Option<bool>,
+    #[serde(alias = "tls_required")]
     pub(crate) tls_required: Option<bool>,
+    #[serde(alias = "tls_verified")]
     pub(crate) tls_verify: Option<bool>,
+    #[serde(alias = "connect_urls")]
     pub(crate) connect_urls: Option<Vec<String>>,
     pub(crate) ldm: Option<bool>,
 
