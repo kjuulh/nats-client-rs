@@ -1,14 +1,12 @@
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-use anyhow::{Error, Result};
+use crate::op::ParserOp;
+use crate::parser;
+use anyhow::Result;
 use bytes::BytesMut;
 use futures::{ready, Sink, Stream};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use crate::op::{ParserOp};
-use crate::parser;
 
 pub struct NatsTcpConn {
     stream: tokio::net::TcpStream,
@@ -28,11 +26,12 @@ impl NatsTcpConn {
     }
 
     fn decode(src: &mut BytesMut) -> Result<Option<ParserOp>> {
-        if src.len() == 0 {
+        if src.is_empty() {
             return Ok(None);
         }
 
-        match parser::Parser::parse(String::from_utf8_lossy(src.as_ref()).into_owned().as_str()).and_then(|op| Ok(Some(op))) {
+        let cmd = String::from_utf8_lossy(src.as_ref()).into_owned();
+        match parser::Parser::parse(cmd.as_str()).map(Some) {
             Ok(op) => {
                 println!("parsing ok {:#?}", op);
                 Ok(op)
@@ -70,7 +69,8 @@ impl Stream for NatsTcpConn {
                     let size = filled.len();
                     this.read_buffer.extend(filled);
                     buff.clear();
-                    let read_buffer_contents = std::str::from_utf8(this.read_buffer.as_ref()).unwrap();
+                    let read_buffer_contents =
+                        std::str::from_utf8(this.read_buffer.as_ref()).unwrap();
                     println!("read_buffer: {}", read_buffer_contents);
 
                     if size > 0 {
@@ -100,11 +100,14 @@ impl Stream for NatsTcpConn {
 impl Sink<ParserOp> for NatsTcpConn {
     type Error = anyhow::Error;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<(), Self::Error>> {
         if !self.flushed {
             match Pin::new(&mut self.get_mut().stream).poll_flush(cx)? {
                 Poll::Ready(()) => Poll::Ready(Ok(())),
-                Poll::Pending => Poll::Pending
+                Poll::Pending => Poll::Pending,
             }
         } else {
             Poll::Ready(Ok(()))
@@ -120,7 +123,10 @@ impl Sink<ParserOp> for NatsTcpConn {
         Ok(())
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<(), Self::Error>> {
         let mut this = self.get_mut();
 
         if this.flushed {
@@ -141,7 +147,10 @@ impl Sink<ParserOp> for NatsTcpConn {
         Poll::Ready(res)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<(), Self::Error>> {
         ready!(self.poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
