@@ -30,7 +30,6 @@ impl Parser {
             ),
         )(i)
     }
-}
 
 fn parse_container<'a, E: ParseError<&'a str> + FromExternalError<&'a str, anyhow::Error> + ContextError<&'a str>>(i: &'a str) -> IResult<&'a str, ParserOp, E> {
     let (input, (command, _)) = pair(
@@ -62,7 +61,7 @@ fn parse_command<'a, E: ParseError<&'a str> + FromExternalError<&'a str, anyhow:
     };
 
     match res {
-        Ok(res) => Ok(("]", res)),
+        Ok(res) => Ok(("", res)),
         Err(e) => Err(Error(FromExternalError::from_external_error(i, ErrorKind::TakeUntil, e))),
     }
 }

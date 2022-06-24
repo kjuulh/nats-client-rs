@@ -1,7 +1,7 @@
 use crate::op::ParserOp;
 use crate::parser;
 use anyhow::Result;
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use futures::{ready, Sink, Stream};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -31,7 +31,7 @@ impl NatsTcpConn {
         }
 
         let cmd = String::from_utf8_lossy(src.as_ref()).into_owned();
-        match parser::Parser::parse(cmd.as_str()).map(Some) {
+        let res = match parser::Parser::parse(cmd.as_str()).map(Some) {
             Ok(op) => {
                 println!("parsing ok {:#?}", op);
                 Ok(op)
@@ -40,7 +40,11 @@ impl NatsTcpConn {
                 eprintln!("parsing error {:#?}", e);
                 Err(e)
             }
-        }
+        };
+
+        src.clear();
+
+        return res
     }
 }
 

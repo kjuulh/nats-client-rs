@@ -1,6 +1,9 @@
+use std::sync::Arc;
 use anyhow::Result;
 
-use futures::{SinkExt, StreamExt};
+use futures::{Sink, SinkExt, StreamExt};
+use futures::stream::SplitSink;
+use tokio::sync::Mutex;
 
 
 use crate::nats_tcp_conn::NatsTcpConn;
@@ -11,13 +14,15 @@ pub mod parser;
 mod op;
 pub mod nats_tcp_conn;
 
-async fn process_events(item: ParserOp) -> anyhow::Result<()> {
+async fn process_events(conn: Arc<Mutex<SplitSink<NatsTcpConn, ParserOp>>>, item: ParserOp) -> anyhow::Result<()> {
     match item {
         ParserOp::Connect(_) => {}
         ParserOp::Info(info) => {
             println!("INFO: {:?}", info)
         }
         ParserOp::Ping => {
+            let mut conn = conn.lock().await;
+            conn.send(ParserOp::Pong).await?;
             println!("PING")
         }
         ParserOp::Pong => {}
@@ -30,10 +35,12 @@ async fn process_events(item: ParserOp) -> anyhow::Result<()> {
 pub async fn connect(url: String) -> Result<()> {
     let stream = tokio::net::TcpStream::connect(url).await?;
     let (mut sink, mut conn) = NatsTcpConn::new(stream).split();
+    let arc_sink = Arc::new(Mutex::new(sink));
+    let sending_sink = arc_sink.clone();
     let handle = tokio::spawn(async move {
         while let Some(item) = conn.next().await {
             println!("handling event: {:#?}", item);
-            if let Err(e) = process_events(item).await {
+            if let Err(e) = process_events(sending_sink.clone(), item).await {
                 eprintln!("{}", e);
                 break;
             }
@@ -41,7 +48,7 @@ pub async fn connect(url: String) -> Result<()> {
         println!("finished")
     });
 
-    sink.send(ParserOp::Connect(NatsConnectOp {
+    arc_sink.lock().await.send(ParserOp::Connect(NatsConnectOp {
         verbose: false,
         pedantic: false,
         tls_required: false,
