@@ -1,7 +1,7 @@
 use crate::op::ParserOp;
 use crate::parser;
 use anyhow::Result;
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use futures::{ready, Sink, Stream};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -44,7 +44,7 @@ impl NatsTcpConn {
 
         src.clear();
 
-        return res
+        return res;
     }
 }
 
