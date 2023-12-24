@@ -9,7 +9,7 @@ edition = "2021"
 tokio = {version = "1.19.2", features=["full"]}
 anyhow = "1.0.57"
 thiserror = "1.0.31"
-futures = { version = "0.3.21"}
+futures = { version = "0.3.30"}
 
 bytes = "1.1.0"
 nom = "7.1.1"
